@@ -1,0 +1,241 @@
+---
+title: "Egypt Energy Plan for 2020"
+author: "Peter Mott"
+date: "Monday, June 08, 2015"
+output:
+  pdf_document: default
+  html_document:
+    css: styles.css
+    theme: flatly
+  font-size: 11pt
+---
+
+```{r include=FALSE}
+# At http://rpubs.com/peter2108/egypt_energy 14/06/15
+# Save with encoding UTF-8. Probable funny - in Excel sheet name
+library(XLConnect)
+library(ggplot2)
+library(reshape2) # melt
+library(dplyr)
+fname <- "bp-statistical-review-of-world-energy-2015-workbook.xlsx"
+wb = loadWorkbook(fname)
+
+loadSheet <- function(wb, sheetName) {
+    df = readWorksheet(wb, sheet=sheetName, startRow=3, check.names=FALSE, header=FALSE)
+    df <- df[,-c(ncol(df), ncol(df)-1)] # Drop last 2 columns %change % of total
+    colnames(df) <- c("country", df[1,-1]) #Row 1 has the year after col 1
+    df <- df[-c(1,2),] # Drop rows before first country
+    df <- melt(df, id.vars="country", variable.name="year")
+    df <- df[!is.na(df[,1]),] # Drop NA countries
+    df <- transform(df, year=as.integer(as.character(year)), value=as.numeric(value))
+    df
+}
+
+# Egypt Wind
+df <- loadSheet(wb, "Wind Consumption - TWh ")
+egypt <- filter(df, country=="Egypt") %>% 
+            select(-country) %>% filter(year>1989) %>% rename(wind=value)
+# Egypt Soar
+df <- loadSheet(wb, "Solar Consumption - TWh")
+df <- filter(df, country=="Egypt") %>% 
+            select(-country) %>% filter(year>1989) %>% rename(solar=value)
+egypt <- inner_join(egypt, df, by="year")
+
+# Egypt Hydro Consumption - TWh
+df <- loadSheet(wb, "Hydro Consumption - TWh")
+df <- filter(df, country=="Egypt") %>% 
+            select(-country) %>% filter(year>1989) %>% rename(hydro=value)
+egypt <- inner_join(egypt, df, by="year")
+
+
+# Egypt Electricity generation
+df = loadSheet(wb, "Electricity Generation ")
+df <- filter(df, country=="Egypt") %>% 
+            select(-country) %>% filter(year>1989) %>% rename(electricity=value)
+egypt <- inner_join(egypt, df, by="year")
+
+tmp <- transform(egypt, electricity=electricity-hydro-solar-wind) %>% rename(fossil=electricity) %>% melt(id.vars="year")
+g <- ggplot(data=tmp, aes(x=year, y=value, fill=variable)) + geom_area() + 
+    xlab("Year") + ylab("Consumption TWh") +
+    ggtitle("Egypt Electricity Consumption") +
+    theme_bw()
+
+# Gas production amd consumption
+df <- loadSheet(wb, "Gas Production – Bcf")
+df <- filter(df, country=="Egypt") %>% 
+      select(-country) %>% 
+      filter(year>1989) %>% 
+      rename(production=value)
+df1 <- loadSheet(wb,"Gas Consumption – Bcf") %>% filter(country=="Egypt") %>% 
+    select(-country) %>% filter(year>1989) %>% rename(consumption=value)
+gas <- inner_join(df,df1, by="year") %>% melt(id.vars="year") %>% rename(Key=variable)
+
+gasplot <- ggplot(data=gas, aes(x=year, y=value, colour=Key)) + geom_line() + 
+    xlab("Year") + ylab("Billion Cubic feet") +
+    ggtitle("Egypt Gas Production & Consumption") +
+    theme_bw()
+
+# Generation and projected CO2 (see text)
+coalgen <- round( 11.2 * 0.65 *8760/1000,1)
+gasgen <- round( 14.4 * 0.55 *8760/1000,1)
+coalCO2 <- round(786*1e-3*coalgen,1)
+gasCO2 <- round(365*1e-3*gasgen,1)
+
+# Emissions
+emissions <- loadSheet(wb, "Carbon Dioxide Emissions") %>% filter(country=="Egypt" | country=="United Kingdom") %>% filter(year>1989) %>% rename(emissions=value)
+
+egypt2020 <- filter(emissions, year==2014 & country=="Egypt")[3] + gasCO2 + coalCO2
+# Above is 298.6
+uk2020interim <- 477
+uk2020intended <- 416
+
+emissionsplot <- ggplot(data=emissions, aes(x=year, y=emissions, colour=country)) +
+    geom_line() + 
+    xlab("Year") + ylab("Million tonnes CO2") +
+    ggtitle("Egypt/UK emissions since 1990") +
+    theme_bw()
+
+emissionsplot <- emissionsplot + 
+annotate("segment", x=2013, xend=2015, y=476.8, yend=476.8) +
+annotate("text", x=2011, y=476.8, label="477 Mt", size=3.5, colour="blue") +
+annotate("text", x=2011, y=416, label="416 Mt", size=3.5, colour="blue") +
+annotate("segment", x=2013, xend=2015, y=416, yend=416) +
+annotate("segment", x=2013, xend=2015,  y=299, yend=299) +
+annotate("text", x=2011, y=299, label="299 Mt", size=3.5, colour="red")     
+
+```
+
+Egypt does not have enough electricity - they have been getting a lot of power cuts, especially in summer of 2014. It's not like in the UK where we worry about our 4% margin of safety above our peak demand, in Egypt peak demand is more than capacity. So the lights go out and the fridge dies and its 35 &deg;C in the shade only there isn't much shade. 
+
+Consumption has tripled from 43 TWh since 1990 to 156 TWh in 2014. As the chart shows this is mostly (90%) derived from fossil fuels, apparently gas and oil and typically using old and inefficient plant. 
+
+```{r, echo=FALSE}
+g
+```
+
+Egypt's current generating capacity is some 30 GW and they are aiming to double it by 2020 or thereabouts. There will be some some renewables in the mix: the Egyptian government is into the sustainability and climate change narratives, they are keen on renewables and they aim for 20% renewable generation by 2020. But in the near and medium term, in the real world, it is gas and coal. 
+
+## New Gas Generation
+
+Siemens (of Germany of course) has just signed the largest contract in its history, an &euro;8 billion deal to build three massive 4.8 GW CCGT (closed cycle gas turbine) power stations, each station housing eight Siemens H-class gas turbines. 
+
+
+That is 14.4 GW of new fossil fuel power. The CEO of Siemens recently said he never expected to sell another gas turbine in Germany. He doesn't need to.
+
+Egypt's production of Natural gas has been languishing recently (see chart) so how will they feed these power stations?
+
+```{r echo=FALSE}
+gasplot
+```
+
+There are suggestions they may buy gas from Israel, via the Leviathan field off the coast of Palestine. They have also signed a &#36;5 billion agreement with the Italian oil major ENI to increase indigenous production again. Apparently they have reserves of 1.3 Tcf which should keep them going well into the 22nd century. 
+
+There is a problem. Egypt subsidises fossil fuels by subsidising electricty. It costs &#36;0.06 to generate a kilowatt hour of electricity which is sold to the public for &#36;0.02. That means that the sale of electricity will not support the cost of extraction from local sources. They are however reducing these subsidies which will raise the price of electricity for Egyptians, including poor Egyptians. Though this is to be done "in a socially responsible" manner (ie avoiding riots) it won't be popular.
+
+## New Coal Generation
+
+In April 2014 Egypt's government voted to overturn a ban on coal imports, allowing the fuel to be used for both industry and power generation.  Cement production is also being converted to use coal. 
+
+Two 2.65 GW coal-fired power stations (not by Siemens!) are proposed, one near Suez and the other half-way down the Red Sea near the port of El Hamarawein where coal from India and South Africa will be unloaded to a specially constructed jetty. 
+
+There is more. Tharwa Investments is to build a 6 GW coal-fired power station - the largest coal-fired power station in the world. 
+
+So that is 11.3GW of new coal capacity.
+
+## Zero carbon generation
+
+As part of it's big contract Siemens will also deliver up to 12 wind farms in the Gulf of Suez and West Nile areas, comprising around 600 wind turbines and an installed capacity of 2GW.  
+
+There are other straws in the wind - some discussion with Putin about nuclear power, a 3GW interconnector with Saudi Arabia, and 2GW of solar power (on a build-own-operate basis). 
+
+## CO2 Implications
+
+Assuming that they find the money to build all this, how much more electricity will they generate, and how much CO2?
+
+Power plants do not run at full capacity all of the time as demand fluctuates (and the plant needs to go down for maintenance from time to time). The *capacity factor* (CF) is the proportion of theoretical (aka "nameplate") capacity that a plant achieves.
+
+The "UK government Digest of United Kingdom Energy Statistics 2014" (DUKES) gives on p.143 capacity factors for gas and coal in UK. Gas was 64% in 2009 and 28% in 2013  (this latter figure is because gas is curtailed in favour of wind, which is why gas power stations are not economic at the moment - but that is another story). Coal was 38.5% in 2009 and 58% in 2013. The US Energy Information Administration also gives capacity factors apparently about 60% for coal and 50% for gas. So we can guess that the new Egyptian coal plants will have a CF of about 65% and the gas plants about 55% (this is because gas is more expensive than coal and easier to ramp up and down following demand - especially with the shiny new Siemens turbines).
+
+In the table below I use the estimates from a 2011 UK Parliament report "Carbon Footprint of Electricity Generation". The figures in the table are at the low end of the ranges given there because this will all be new plant, however a higher a figure might well be appropriate for coal. 
+
+<div style="width:70%;margin-left:auto;margin-right:auto">
+Fuel  | CF   |  Capacity (GW) | CO2 gm/kWh  |   Generated (TWh) |  CO2 (Mt)
+:--:  | :--: | :--------:     | :--------:  |   :------------:  | :-----:
+Coal  | 0.65 |     11.2       |     786     |      `r coalgen`  | `r coalCO2`
+Gas   | 0.55 |     13.2       |     365     |      `r gasgen`   | `r gasCO2`
+</div>
+
+
+In 2014 they generated 156 TWh and the new fossil fuel capacity should permit a further `r coalgen+gasgen` TWh which with some renewable generation allows them to roughly double their electricity output as they want.
+
+The chart below shows Egypt's emissions since 1990 compared with UK emissions. 
+
+```{r echo=FALSE}
+emissionsplot
+```
+
+I have also marked the UK Climate Change Act (2008) targets for emissions for 2020 in blue. Actually there are two targets, an _interim_ target and an _intended_ target. Why two? Well the intended one was to be in force after the COP20 (2009) agreements, though since there were no such agreements it remained merely intended and the interim one became permanent, until COP21 anyway. After adding all its gas and coal power Egypt will still emit less than half of our more ambitious 2020 target (and if you measure emissions per head it would be even less as Egypt has a lot more people than the UK). 
+
+## Wrap
+
+Someone called Izabella Kaminska recently wrote a piece in the FT "Since you asked: A ray of sunshine falls on an ever warmer world". It contains this:
+
+<div class="quote">
+A major stumbling block is the difficulty of persuading poorer countries to slow down carbon-intensive development in favour of a more environmentally friendly kind that is also more expensive.
+</div>
+
+Yes Izabella it's going to be tough. But you can at least be pleased that
+Egypt is intending to phase out incandescent light bulbs and replace them with LED's. 
+Every little bit helps ...
+
+## Sources
+
+[BP Statistical Review of World Energy 2015](http://www.bp.com/en/global/corporate/about-bp/energy-economics/statistical-review-of-world-energy.html)
+
+[Egypt seeks to double its power generation capacity March 15)](http://www.thenational.ae/business/energy/egypt-seeks-to-double-its-power-generation-capacity)
+
+[Carbon Footprint of Electricity Generation 2011](http://www.parliament.uk/documents/post/postpn_383-carbon-footprint-electricity-generation.pdf)
+
+[Rising demand led to power outages - EgyptTheFuture](https://www.egyptthefuture.com/sector/electricity-renewable-energy/)
+
+[ENI agreement to develop gas resources March 2015](http://www.eni.com/en_IT/media/press-releases/2015/03/Eni_signs_framework_agreement_development_Egypt_oil_gas_resources.shtml)
+
+[Renewable Proposals March 2015](https://www.egyptthefuture.com/latest/masdar-acwa-power-eehc-sign-mou/)
+
+[Red Sea Coal. November 2014](http://www.powerengineeringint.com/articles/2014/11/abu-dhabi-firm-wins-egypt-coal-plant-deal.html)
+
+[ Suez Coal. March 2015 ](http://www.esi-africa.com/egypt-ministry-of-electricity-invests-4-5bn-in-coal-fired-power/)
+
+[Siemens Contract](http://www.siemens.com/press/en/feature/2015/corporate/2015-06-egypt.php)
+
+[Israeli gas and subsidy](http://www.esi-africa.com/egypts-power-sector-transitioning-for-growth/)
+
+[ENI oil and gas development](http://www.eni.com/en_IT/media/press-releases/2015/03/Eni_signs_framework_agreement_development_Egypt_oil_gas_resources.shtml)
+
+[Removing ban on coal imports](http://www.madamasr.com/news/environment/egypt-sign-7-coal-power-deals-chinese-companies)
+
+[Tharwa coal plant, 1 March 2015](http://www.egyptoil-gas.com/news/us9-6-billion-for-egyptian-owned-coal-power-plant/)
+
+[Tharwa Coal plant, 2  March 2015](http://www.utilities-me.com/article-3442-tharwa-to-develop-11bn-coal-plant-in-egypt/)
+
+[Cement moves to coal](http://www.egyptoil-gas.com/news/egypts-first-coal-conference-concludes-cement-factories-to-use-coal/)
+
+[Old, inefficient plant](http://www.slideshare.net/HussainalNowais/plans-for-egypts-first-coalfired-power-plant)
+
+[Some solar power](http://www.utilities-me.com/article-3437-terra-sola-plans-35bn-egypt-solar-investment/)
+
+[Digest of United Kingdom Energy Statistics 2014 p.143](https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/338750/DUKES_2014_printed.pdf)
+
+[USA Energy Information Administration]( http://www.eia.gov/todayinenergy/detail.cfm?id=14611)
+
+[Carbon Footprint of Electricity Generation](http://www.parliament.uk/documents/post/postpn_383-carbon-footprint-electricity-generation.pdf )
+
+
+
+
+
+
+
+
+
+
