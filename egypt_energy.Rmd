@@ -17,6 +17,16 @@ library(XLConnect)
 library(ggplot2)
 library(reshape2) # melt
 library(dplyr)
+
+fname <- "bp-statistical-review-of-world-energy-2015-workbook.xlsx"
+
+if (! file.exists(fname)) {
+    url <- "http://www.bp.com/content/dam/bp/excel/Energy-Economics/statistical-review-2015/bp-statistical-review-of-world-energy-2015-workbook.xlsx"
+    downloadFile(url, filename=fname),    
+}
+
+wb = loadWorkbook(fname)
+
 fname <- "bp-statistical-review-of-world-energy-2015-workbook.xlsx"
 wb = loadWorkbook(fname)
 
